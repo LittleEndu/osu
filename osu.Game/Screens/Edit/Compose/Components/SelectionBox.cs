@@ -92,6 +92,7 @@ namespace osu.Game.Screens.Edit.Compose.Components
             }
         }
 
+        private Container dragHandles;
         private FillFlowContainer buttons;
 
         public const float BORDER_RADIUS = 3;
@@ -112,16 +113,25 @@ namespace osu.Game.Screens.Edit.Compose.Components
             if (e.Repeat || !e.ControlPressed)
                 return false;
 
+            bool runOperationFromHotkey(Func<bool> operation)
+            {
+                operationStarted();
+                bool result = operation?.Invoke() ?? false;
+                operationEnded();
+
+                return result;
+            }
+
             switch (e.Key)
             {
                 case Key.G:
-                    return CanReverse && OnReverse?.Invoke() == true;
+                    return CanReverse && runOperationFromHotkey(OnReverse);
 
                 case Key.H:
-                    return CanScaleX && OnFlip?.Invoke(Direction.Horizontal) == true;
+                    return CanScaleX && runOperationFromHotkey(() => OnFlip?.Invoke(Direction.Horizontal) ?? false);
 
                 case Key.J:
-                    return CanScaleY && OnFlip?.Invoke(Direction.Vertical) == true;
+                    return CanScaleY && runOperationFromHotkey(() => OnFlip?.Invoke(Direction.Vertical) ?? false);
             }
 
             return base.OnKeyDown(e);
@@ -150,6 +160,12 @@ namespace osu.Game.Screens.Edit.Compose.Components
                             Alpha = 0
                         },
                     }
+                },
+                dragHandles = new Container
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    // ensures that the centres of all drag handles line up with the middle of the selection box border.
+                    Padding = new MarginPadding(BORDER_RADIUS / 2)
                 },
                 buttons = new FillFlowContainer
                 {
@@ -232,7 +248,7 @@ namespace osu.Game.Screens.Edit.Compose.Components
             });
         }
 
-        private void addDragHandle(Anchor anchor) => AddInternal(new SelectionBoxDragHandle
+        private void addDragHandle(Anchor anchor) => dragHandles.Add(new SelectionBoxDragHandle
         {
             Anchor = anchor,
             HandleDrag = e => OnScale?.Invoke(e.Delta, anchor),
