@@ -39,7 +39,7 @@ namespace osu.Game.Screens.Play
 {
     [Cached]
     [Cached(typeof(ISamplePlaybackDisabler))]
-    public class Player : ScreenWithBeatmapBackground, ISamplePlaybackDisabler
+    public abstract class Player : ScreenWithBeatmapBackground, ISamplePlaybackDisabler
     {
         /// <summary>
         /// The delay upon completion of the beatmap before displaying the results screen.
@@ -135,7 +135,7 @@ namespace osu.Game.Screens.Play
         /// <summary>
         /// Create a new player instance.
         /// </summary>
-        public Player(PlayerConfiguration configuration = null)
+        protected Player(PlayerConfiguration configuration = null)
         {
             Configuration = configuration ?? new PlayerConfiguration();
         }
@@ -295,7 +295,7 @@ namespace osu.Game.Screens.Play
             IsBreakTime.BindValueChanged(onBreakTimeChanged, true);
         }
 
-        protected virtual GameplayClockContainer CreateGameplayClockContainer(WorkingBeatmap beatmap, double gameplayStart) => new GameplayClockContainer(beatmap, gameplayStart);
+        protected virtual GameplayClockContainer CreateGameplayClockContainer(WorkingBeatmap beatmap, double gameplayStart) => new MasterGameplayClockContainer(beatmap, gameplayStart);
 
         private Drawable createUnderlayComponents() =>
             DimmableStoryboard = new DimmableStoryboard(Beatmap.Value.Storyboard) { RelativeSizeAxes = Axes.Both };
@@ -342,7 +342,6 @@ namespace osu.Game.Screens.Play
                             Action = () => PerformExit(true),
                             IsPaused = { BindTarget = GameplayClockContainer.IsPaused }
                         },
-                        PlayerSettingsOverlay = { PlaybackSettings = { UserPlaybackRate = { BindTarget = GameplayClockContainer.UserPlaybackRate } } },
                         KeyCounter =
                         {
                             AlwaysVisible = { BindTarget = DrawableRuleset.HasReplayLoaded },
@@ -385,6 +384,9 @@ namespace osu.Game.Screens.Play
                     failAnimation = new FailAnimation(DrawableRuleset) { OnComplete = onFailComplete, },
                 }
             };
+
+            if (GameplayClockContainer is MasterGameplayClockContainer master)
+                HUDOverlay.PlayerSettingsOverlay.PlaybackSettings.UserPlaybackRate.BindTarget = master.UserPlaybackRate;
 
             if (!Configuration.AllowSkippingIntro)
                 skipOverlay.Expire();
@@ -533,7 +535,8 @@ namespace osu.Game.Screens.Play
             // user requested skip
             // disable sample playback to stop currently playing samples and perform skip
             samplePlaybackDisabled.Value = true;
-            GameplayClockContainer.Skip();
+
+            (GameplayClockContainer as MasterGameplayClockContainer)?.Skip();
 
             // return samplePlaybackDisabled.Value to what is defined by the beatmap's current state
             updateSampleDisabledState();
@@ -559,7 +562,7 @@ namespace osu.Game.Screens.Play
         }
 
         private ScheduledDelegate completionProgressDelegate;
-        private Task<ScoreInfo> scoreSubmissionTask;
+        private Task<ScoreInfo> prepareScoreForDisplayTask;
 
         private void updateCompletionState(ValueChangedEvent<bool> completionState)
         {
@@ -586,17 +589,17 @@ namespace osu.Game.Screens.Play
 
             if (!Configuration.ShowResults) return;
 
-            scoreSubmissionTask ??= Task.Run(async () =>
+            prepareScoreForDisplayTask ??= Task.Run(async () =>
             {
                 var score = CreateScore();
 
                 try
                 {
-                    await SubmitScore(score).ConfigureAwait(false);
+                    await PrepareScoreForResultsAsync(score).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(ex, "Score submission failed!");
+                    Logger.Error(ex, "Score preparation failed!");
                 }
 
                 try
@@ -617,7 +620,7 @@ namespace osu.Game.Screens.Play
 
         private void scheduleCompletion() => completionProgressDelegate = Schedule(() =>
         {
-            if (!scoreSubmissionTask.IsCompleted)
+            if (!prepareScoreForDisplayTask.IsCompleted)
             {
                 scheduleCompletion();
                 return;
@@ -625,7 +628,7 @@ namespace osu.Game.Screens.Play
 
             // screen may be in the exiting transition phase.
             if (this.IsCurrentScreen())
-                this.Push(CreateResults(scoreSubmissionTask.Result));
+                this.Push(CreateResults(prepareScoreForDisplayTask.Result));
         });
 
         protected override bool OnScroll(ScrollEvent e) => mouseWheelDisabled.Value && !GameplayClockContainer.IsPaused.Value;
@@ -764,7 +767,7 @@ namespace osu.Game.Screens.Play
 
             ApplyToBackground(b =>
             {
-                b.EnableUserDim.Value = true;
+                b.IgnoreUserSettings.Value = false;
                 b.BlurAmount.Value = 0;
 
                 // bind component bindables.
@@ -808,7 +811,7 @@ namespace osu.Game.Screens.Play
             if (GameplayClockContainer.GameplayClock.IsRunning)
                 throw new InvalidOperationException($"{nameof(StartGameplay)} should not be called when the gameplay clock is already running");
 
-            GameplayClockContainer.Restart();
+            GameplayClockContainer.Reset();
         }
 
         public override void OnSuspending(IScreen next)
@@ -832,7 +835,7 @@ namespace osu.Game.Screens.Play
 
             // GameplayClockContainer performs seeks / start / stop operations on the beatmap's track.
             // as we are no longer the current screen, we cannot guarantee the track is still usable.
-            GameplayClockContainer?.StopUsingBeatmapClock();
+            (GameplayClockContainer as MasterGameplayClockContainer)?.StopUsingBeatmapClock();
 
             musicController.ResetTrackAdjustments();
 
@@ -895,11 +898,11 @@ namespace osu.Game.Screens.Play
         }
 
         /// <summary>
-        /// Submits the player's <see cref="Score"/>.
+        /// Prepare the <see cref="Score"/> for display at results.
         /// </summary>
-        /// <param name="score">The <see cref="Score"/> to submit.</param>
-        /// <returns>The submitted score.</returns>
-        protected virtual Task SubmitScore(Score score) => Task.CompletedTask;
+        /// <param name="score">The <see cref="Score"/> to prepare.</param>
+        /// <returns>A task that prepares the provided score. On completion, the score is assumed to be ready for display.</returns>
+        protected virtual Task PrepareScoreForResultsAsync(Score score) => Task.CompletedTask;
 
         /// <summary>
         /// Creates the <see cref="ResultsScreen"/> for a <see cref="ScoreInfo"/>.
@@ -913,7 +916,7 @@ namespace osu.Game.Screens.Play
             float fadeOutDuration = instant ? 0 : 250;
             this.FadeOut(fadeOutDuration);
 
-            ApplyToBackground(b => b.EnableUserDim.Value = false);
+            ApplyToBackground(b => b.IgnoreUserSettings.Value = true);
             storyboardReplacesBackground.Value = false;
         }
 

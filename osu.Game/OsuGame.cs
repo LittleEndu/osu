@@ -27,7 +27,6 @@ using osu.Framework.Extensions.IEnumerableExtensions;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
-using osu.Framework.Input.Events;
 using osu.Framework.Threading;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
@@ -531,6 +530,13 @@ namespace osu.Game
             SentryLogger.Dispose();
         }
 
+        protected override IDictionary<FrameworkSetting, object> GetFrameworkConfigDefaults()
+            => new Dictionary<FrameworkSetting, object>
+            {
+                // General expectation that osu! starts in fullscreen by default (also gives the most predictable performance)
+                { FrameworkSetting.WindowMode, WindowMode.Fullscreen }
+            };
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -570,6 +576,15 @@ namespace osu.Game
             BackButton.Receptor receptor;
 
             dependencies.CacheAs(idleTracker = new GameIdleTracker(6000));
+
+            var sessionIdleTracker = new GameIdleTracker(300000);
+            sessionIdleTracker.IsIdle.BindValueChanged(idle =>
+            {
+                if (idle.NewValue)
+                    SessionStatics.ResetValues();
+            });
+
+            Add(sessionIdleTracker);
 
             AddRange(new Drawable[]
             {
@@ -870,13 +885,6 @@ namespace osu.Game
             });
 
             return component;
-        }
-
-        protected override bool OnScroll(ScrollEvent e)
-        {
-            // forward any unhandled mouse scroll events to the volume control.
-            volume.Adjust(GlobalAction.IncreaseVolume, e.ScrollDelta.Y, e.IsPrecise);
-            return true;
         }
 
         public bool OnPressed(GlobalAction action)

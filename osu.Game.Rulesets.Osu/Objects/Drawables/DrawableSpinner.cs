@@ -30,14 +30,26 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
         public new OsuSpinnerJudgementResult Result => (OsuSpinnerJudgementResult)base.Result;
 
         public SpinnerRotationTracker RotationTracker { get; private set; }
-        public SpinnerSpmCounter SpmCounter { get; private set; }
+
+        private SpinnerSpmCalculator spmCalculator;
 
         private Container<DrawableSpinnerTick> ticks;
-        private SpinnerBonusDisplay bonusDisplay;
         private PausableSkinnableSound spinningSample;
 
         private Bindable<bool> isSpinning;
         private bool spinnerFrequencyModulate;
+
+        /// <summary>
+        /// The amount of bonus score gained from spinning after the required number of spins, for display purposes.
+        /// </summary>
+        public IBindable<double> GainedBonus => gainedBonus;
+
+        private readonly Bindable<double> gainedBonus = new BindableDouble();
+
+        /// <summary>
+        /// The number of spins per minute this spinner is spinning at, for display purposes.
+        /// </summary>
+        public readonly IBindable<double> SpinsPerMinute = new BindableDouble();
 
         private const double fade_out_duration = 160;
 
@@ -57,8 +69,12 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
             Origin = Anchor.Centre;
             RelativeSizeAxes = Axes.Both;
 
-            InternalChildren = new Drawable[]
+            AddRangeInternal(new Drawable[]
             {
+                spmCalculator = new SpinnerSpmCalculator
+                {
+                    Result = { BindTarget = SpinsPerMinute },
+                },
                 ticks = new Container<DrawableSpinnerTick>(),
                 new AspectContainer
                 {
@@ -67,22 +83,9 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
                     RelativeSizeAxes = Axes.Y,
                     Children = new Drawable[]
                     {
-                        new SkinnableDrawable(new OsuSkinComponent(OsuSkinComponents.SpinnerBody), _ => new DefaultSpinnerDisc()),
+                        new SkinnableDrawable(new OsuSkinComponent(OsuSkinComponents.SpinnerBody), _ => new DefaultSpinner()),
                         RotationTracker = new SpinnerRotationTracker(this)
                     }
-                },
-                SpmCounter = new SpinnerSpmCounter
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    Y = 120,
-                    Alpha = 0
-                },
-                bonusDisplay = new SpinnerBonusDisplay
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    Y = -120,
                 },
                 spinningSample = new PausableSkinnableSound
                 {
@@ -90,7 +93,7 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
                     Looping = true,
                     Frequency = { Value = spinning_sample_initial_frequency }
                 }
-            };
+            });
 
             PositionBindable.BindValueChanged(pos => Position = pos.NewValue);
         }
@@ -158,17 +161,6 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
                 case DrawableSpinnerTick tick:
                     ticks.Add(tick);
                     break;
-            }
-        }
-
-        protected override void UpdateStartTimeStateTransforms()
-        {
-            base.UpdateStartTimeStateTransforms();
-
-            if (Result?.TimeStarted is double startTime)
-            {
-                using (BeginAbsoluteSequence(startTime))
-                    fadeInCounter();
             }
         }
 
@@ -282,21 +274,18 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
         {
             base.UpdateAfterChildren();
 
-            if (!SpmCounter.IsPresent && RotationTracker.Tracking)
-            {
-                Result.TimeStarted ??= Time.Current;
-                fadeInCounter();
-            }
+            if (Result.TimeStarted == null && RotationTracker.Tracking)
+                Result.TimeStarted = Time.Current;
 
             // don't update after end time to avoid the rate display dropping during fade out.
             // this shouldn't be limited to StartTime as it causes weirdness with the underlying calculation, which is expecting updates during that period.
             if (Time.Current <= HitObject.EndTime)
-                SpmCounter.SetRotation(Result.RateAdjustedRotation);
+                spmCalculator.SetRotation(Result.RateAdjustedRotation);
 
             updateBonusScore();
         }
 
-        private void fadeInCounter() => SpmCounter.FadeIn(HitObject.TimeFadeIn);
+        private static readonly int score_per_tick = new SpinnerBonusTick.OsuSpinnerBonusTickJudgement().MaxNumericResult;
 
         private int wholeSpins;
 
@@ -322,8 +311,9 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
                 if (tick != null)
                 {
                     tick.TriggerResult(true);
+
                     if (tick is DrawableSpinnerBonusTick)
-                        bonusDisplay.SetBonusCount(spins - HitObject.SpinsRequired);
+                        gainedBonus.Value = score_per_tick * (spins - HitObject.SpinsRequired);
                 }
 
                 wholeSpins++;

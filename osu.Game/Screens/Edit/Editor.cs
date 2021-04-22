@@ -16,7 +16,6 @@ using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Logging;
-using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Framework.Timing;
 using osu.Game.Beatmaps;
@@ -36,6 +35,7 @@ using osu.Game.Screens.Edit.Compose;
 using osu.Game.Screens.Edit.Design;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Edit.Timing;
+using osu.Game.Screens.Edit.Verify;
 using osu.Game.Screens.Play;
 using osu.Game.Users;
 using osuTK.Graphics;
@@ -103,7 +103,7 @@ namespace osu.Game.Screens.Edit
         private MusicController music { get; set; }
 
         [BackgroundDependencyLoader]
-        private void load(OsuColour colours, GameHost host, OsuConfigManager config)
+        private void load(OsuColour colours, OsuConfigManager config)
         {
             var loadableBeatmap = Beatmap.Value;
 
@@ -123,22 +123,6 @@ namespace osu.Game.Screens.Edit
                     return;
             }
 
-            beatDivisor.Value = loadableBeatmap.BeatmapInfo.BeatDivisor;
-            beatDivisor.BindValueChanged(divisor => loadableBeatmap.BeatmapInfo.BeatDivisor = divisor.NewValue);
-
-            // Todo: should probably be done at a DrawableRuleset level to share logic with Player.
-            clock = new EditorClock(loadableBeatmap, beatDivisor) { IsCoupled = false };
-
-            UpdateClockSource();
-
-            dependencies.CacheAs(clock);
-            AddInternal(clock);
-
-            clock.SeekingOrStopped.BindValueChanged(_ => updateSampleDisabledState());
-
-            // todo: remove caching of this and consume via editorBeatmap?
-            dependencies.Cache(beatDivisor);
-
             try
             {
                 playableBeatmap = loadableBeatmap.GetPlayableBeatmap(loadableBeatmap.BeatmapInfo.Ruleset);
@@ -154,6 +138,22 @@ namespace osu.Game.Screens.Edit
                 this.Exit();
                 return;
             }
+
+            beatDivisor.Value = playableBeatmap.BeatmapInfo.BeatDivisor;
+            beatDivisor.BindValueChanged(divisor => playableBeatmap.BeatmapInfo.BeatDivisor = divisor.NewValue);
+
+            // Todo: should probably be done at a DrawableRuleset level to share logic with Player.
+            clock = new EditorClock(playableBeatmap, beatDivisor) { IsCoupled = false };
+
+            UpdateClockSource();
+
+            dependencies.CacheAs(clock);
+            AddInternal(clock);
+
+            clock.SeekingOrStopped.BindValueChanged(_ => updateSampleDisabledState());
+
+            // todo: remove caching of this and consume via editorBeatmap?
+            dependencies.Cache(beatDivisor);
 
             AddInternal(editorBeatmap = new EditorBeatmap(playableBeatmap, loadableBeatmap.Skin));
             dependencies.CacheAs(editorBeatmap);
@@ -224,9 +224,10 @@ namespace osu.Game.Screens.Edit
                                 },
                                 new MenuItem("View")
                                 {
-                                    Items = new[]
+                                    Items = new MenuItem[]
                                     {
-                                        new WaveformOpacityMenu(config)
+                                        new WaveformOpacityMenuItem(config.GetBindable<float>(OsuSetting.EditorWaveformOpacity)),
+                                        new HitAnimationsMenuItem(config.GetBindable<bool>(OsuSetting.EditorHitAnimations))
                                     }
                                 }
                             }
@@ -445,6 +446,10 @@ namespace osu.Game.Screens.Edit
                     menuBar.Mode.Value = EditorScreenMode.SongSetup;
                     return true;
 
+                case GlobalAction.EditorVerifyMode:
+                    menuBar.Mode.Value = EditorScreenMode.Verify;
+                    return true;
+
                 default:
                     return false;
             }
@@ -463,7 +468,7 @@ namespace osu.Game.Screens.Edit
                 // todo: temporary. we want to be applying dim using the UserDimContainer eventually.
                 b.FadeColour(Color4.DarkGray, 500);
 
-                b.EnableUserDim.Value = false;
+                b.IgnoreUserSettings.Value = true;
                 b.BlurAmount.Value = 0;
             });
 
@@ -631,6 +636,10 @@ namespace osu.Game.Screens.Edit
 
                     case EditorScreenMode.Timing:
                         currentScreen = new TimingScreen();
+                        break;
+
+                    case EditorScreenMode.Verify:
+                        currentScreen = new VerifyScreen();
                         break;
                 }
 
