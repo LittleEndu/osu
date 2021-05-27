@@ -36,4 +36,7 @@
   <ItemGroup Label="Resources">
     <EmbeddedResource Include="lazer.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Globalization.UseNls" Value="true" />
+  </ItemGroup>
 </Project>
