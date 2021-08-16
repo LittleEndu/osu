@@ -60,6 +60,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
         protected override float FadeExponent => 1;
 
         protected override bool InterpolateMovements => !disjointTrail;
+        protected override bool AvoidDrawingMiddle => !disjointTrail;
 
         protected override float IntervalMultiplier => 1 / Math.Max(cursorSize.Value, 1);
 

@@ -138,6 +138,7 @@ namespace osu.Game.Rulesets.Osu.UI.Cursor
         protected virtual bool InterpolateMovements => true;
 
         protected virtual float IntervalMultiplier => 1.0f;
+        protected virtual bool AvoidDrawingMiddle => false;
 
         private Vector2? lastPosition;
         private readonly InputResampler resampler = new InputResampler();
@@ -150,23 +151,23 @@ namespace osu.Game.Rulesets.Osu.UI.Cursor
             return base.OnMouseMove(e);
         }
 
-        protected void AddTrail(Vector2 position)
+        protected void AddTrail(Vector2 mousePosition)
         {
             if (InterpolateMovements)
             {
                 if (!lastPosition.HasValue)
                 {
-                    lastPosition = position;
+                    lastPosition = mousePosition;
                     resampler.AddPosition(lastPosition.Value);
                     return;
                 }
 
-                foreach (Vector2 pos2 in resampler.AddPosition(position))
+                foreach (Vector2 target in resampler.AddPosition(mousePosition))
                 {
                     Trace.Assert(lastPosition.HasValue);
 
-                    Vector2 pos1 = lastPosition.Value;
-                    Vector2 diff = pos2 - pos1;
+                    Vector2 current = lastPosition.Value;
+                    Vector2 diff = target - current;
                     float distance = diff.Length;
                     Vector2 direction = diff / distance;
 
@@ -174,14 +175,19 @@ namespace osu.Game.Rulesets.Osu.UI.Cursor
 
                     for (float d = interval; d < distance; d += interval)
                     {
-                        lastPosition = pos1 + direction * d;
+                        Vector2 next = current + direction * d;
+
+                        if (AvoidDrawingMiddle && (next - mousePosition).Length < interval)
+                            return;
+
+                        lastPosition = next;
                         addPart(lastPosition.Value);
                     }
                 }
             }
             else
             {
-                lastPosition = position;
+                lastPosition = mousePosition;
                 addPart(lastPosition.Value);
             }
         }
