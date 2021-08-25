@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Audio;
+using osu.Framework.Audio.Mixing;
 using osu.Framework.Audio.Track;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
@@ -27,14 +28,17 @@ namespace osu.Game.Audio
 
         protected TrackManagerPreviewTrack CurrentTrack;
 
+        private readonly BindableNumber<double> globalTrackVolumeAdjust = new BindableNumber<double>(OsuGameBase.GLOBAL_TRACK_VOLUME_ADJUST);
+
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(AudioManager audioManager)
         {
             // this is a temporary solution to get around muting ourselves.
             // todo: update this once we have a BackgroundTrackManager or similar.
-            trackStore = new PreviewTrackStore(new OnlineStore());
+            trackStore = new PreviewTrackStore(audioManager.Mixer, new OnlineStore());
 
             audio.AddItem(trackStore);
+            trackStore.AddAdjustment(AdjustableProperty.Volume, globalTrackVolumeAdjust);
             trackStore.AddAdjustment(AdjustableProperty.Volume, audio.VolumeTrack);
         }
 
@@ -115,10 +119,12 @@ namespace osu.Game.Audio
 
         private class PreviewTrackStore : AudioCollectionManager<AdjustableAudioComponent>, ITrackStore
         {
+            private readonly AudioMixer defaultMixer;
             private readonly IResourceStore<byte[]> store;
 
-            internal PreviewTrackStore(IResourceStore<byte[]> store)
+            internal PreviewTrackStore(AudioMixer defaultMixer, IResourceStore<byte[]> store)
             {
+                this.defaultMixer = defaultMixer;
                 this.store = store;
             }
 
@@ -142,8 +148,12 @@ namespace osu.Game.Audio
                 if (dataStream == null)
                     return null;
 
+                // Todo: This is quite unsafe. TrackBass shouldn't be exposed as public.
                 Track track = new TrackBass(dataStream);
+
+                defaultMixer.Add(track);
                 AddItem(track);
+
                 return track;
             }
 

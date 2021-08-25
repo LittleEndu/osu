@@ -49,7 +49,7 @@ namespace osu.Game.Tests.Visual.Online
         [Test]
         public void TestPlayActivity()
         {
-            AddStep("Set activity", () => api.Activity.Value = new UserActivity.SoloGame(new BeatmapInfo(), new RulesetInfo()));
+            AddStep("Set activity", () => api.Activity.Value = new UserActivity.InSoloGame(new BeatmapInfo(), new RulesetInfo()));
 
             AddStep("Run command", () => Add(new NowPlayingCommand()));
 
@@ -70,7 +70,7 @@ namespace osu.Game.Tests.Visual.Online
             AddStep("Run command", () => Add(new NowPlayingCommand()));
 
             if (hasOnlineId)
-                AddAssert("Check link presence", () => postTarget.LastMessage.Contains("https://osu.ppy.sh/b/1234"));
+                AddAssert("Check link presence", () => postTarget.LastMessage.Contains("/b/1234"));
             else
                 AddAssert("Check link not present", () => !postTarget.LastMessage.Contains("https://"));
         }

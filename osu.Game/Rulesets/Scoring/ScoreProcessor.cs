@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Bindables;
-using osu.Framework.Extensions;
 using osu.Framework.Utils;
 using osu.Game.Rulesets.Judgements;
 using osu.Game.Rulesets.Mods;
@@ -68,7 +67,12 @@ namespace osu.Game.Rulesets.Scoring
         private readonly double comboPortion;
 
         private int maxAchievableCombo;
+
+        /// <summary>
+        /// The maximum achievable base score.
+        /// </summary>
         private double maxBaseScore;
+
         private double rollingMaxBaseScore;
         private double baseScore;
 
@@ -141,7 +145,7 @@ namespace osu.Game.Rulesets.Scoring
                 rollingMaxBaseScore += result.Judgement.MaxNumericResult;
             }
 
-            scoreResultCounts[result.Type] = scoreResultCounts.GetOrDefault(result.Type) + 1;
+            scoreResultCounts[result.Type] = scoreResultCounts.GetValueOrDefault(result.Type) + 1;
 
             hitEvents.Add(CreateHitEvent(result));
             lastHitObject = result.HitObject;
@@ -176,7 +180,7 @@ namespace osu.Game.Rulesets.Scoring
                 rollingMaxBaseScore -= result.Judgement.MaxNumericResult;
             }
 
-            scoreResultCounts[result.Type] = scoreResultCounts.GetOrDefault(result.Type) - 1;
+            scoreResultCounts[result.Type] = scoreResultCounts.GetValueOrDefault(result.Type) - 1;
 
             Debug.Assert(hitEvents.Count > 0);
             lastHitObject = hitEvents[^1].LastHitObject;
@@ -188,7 +192,7 @@ namespace osu.Game.Rulesets.Scoring
         private void updateScore()
         {
             if (rollingMaxBaseScore != 0)
-                Accuracy.Value = baseScore / rollingMaxBaseScore;
+                Accuracy.Value = calculateAccuracyRatio(baseScore, true);
 
             TotalScore.Value = getScore(Mode.Value);
         }
@@ -196,8 +200,8 @@ namespace osu.Game.Rulesets.Scoring
         private double getScore(ScoringMode mode)
         {
             return GetScore(mode, maxAchievableCombo,
-                maxBaseScore > 0 ? baseScore / maxBaseScore : 0,
-                maxAchievableCombo > 0 ? (double)HighestCombo.Value / maxAchievableCombo : 1,
+                calculateAccuracyRatio(baseScore),
+                calculateComboRatio(HighestCombo.Value),
                 scoreResultCounts);
         }
 
@@ -227,9 +231,48 @@ namespace osu.Game.Rulesets.Scoring
             }
         }
 
+        /// <summary>
+        /// Given a minimal set of inputs, return the computed score for the tracked beatmap / mods combination, at the current point in time.
+        /// </summary>
+        /// <param name="mode">The <see cref="ScoringMode"/> to compute the total score in.</param>
+        /// <param name="maxCombo">The maximum combo achievable in the beatmap.</param>
+        /// <param name="statistics">Statistics to be used for calculating accuracy, bonus score, etc.</param>
+        /// <returns>The computed score for provided inputs.</returns>
+        public double GetImmediateScore(ScoringMode mode, int maxCombo, Dictionary<HitResult, int> statistics)
+        {
+            // calculate base score from statistics pairs
+            int computedBaseScore = 0;
+
+            foreach (var pair in statistics)
+            {
+                if (!pair.Key.AffectsAccuracy())
+                    continue;
+
+                computedBaseScore += Judgement.ToNumericResult(pair.Key) * pair.Value;
+            }
+
+            return GetScore(mode, maxAchievableCombo, calculateAccuracyRatio(computedBaseScore), calculateComboRatio(maxCombo), statistics);
+        }
+
+        /// <summary>
+        /// Get the accuracy fraction for the provided base score.
+        /// </summary>
+        /// <param name="baseScore">The score to be used for accuracy calculation.</param>
+        /// <param name="preferRolling">Whether the rolling base score should be used (ie. for the current point in time based on Apply/Reverted results).</param>
+        /// <returns>The computed accuracy.</returns>
+        private double calculateAccuracyRatio(double baseScore, bool preferRolling = false)
+        {
+            if (preferRolling && rollingMaxBaseScore != 0)
+                return baseScore / rollingMaxBaseScore;
+
+            return maxBaseScore > 0 ? baseScore / maxBaseScore : 1;
+        }
+
+        private double calculateComboRatio(int maxCombo) => maxAchievableCombo > 0 ? (double)maxCombo / maxAchievableCombo : 1;
+
         private double getBonusScore(Dictionary<HitResult, int> statistics)
-            => statistics.GetOrDefault(HitResult.SmallBonus) * Judgement.SMALL_BONUS_SCORE
-               + statistics.GetOrDefault(HitResult.LargeBonus) * Judgement.LARGE_BONUS_SCORE;
+            => statistics.GetValueOrDefault(HitResult.SmallBonus) * Judgement.SMALL_BONUS_SCORE
+               + statistics.GetValueOrDefault(HitResult.LargeBonus) * Judgement.LARGE_BONUS_SCORE;
 
         private ScoreRank rankFrom(double acc)
         {
@@ -247,7 +290,7 @@ namespace osu.Game.Rulesets.Scoring
             return ScoreRank.D;
         }
 
-        public int GetStatistic(HitResult result) => scoreResultCounts.GetOrDefault(result);
+        public int GetStatistic(HitResult result) => scoreResultCounts.GetValueOrDefault(result);
 
         public double GetStandardisedScore() => getScore(ScoringMode.Standardised);
 
@@ -293,21 +336,14 @@ namespace osu.Game.Rulesets.Scoring
             score.TotalScore = (long)Math.Round(GetStandardisedScore());
             score.Combo = Combo.Value;
             score.MaxCombo = HighestCombo.Value;
-            score.Accuracy = Math.Round(Accuracy.Value, 4);
+            score.Accuracy = Accuracy.Value;
             score.Rank = Rank.Value;
-            score.Date = DateTimeOffset.Now;
 
             foreach (var result in Enum.GetValues(typeof(HitResult)).OfType<HitResult>().Where(r => r.IsScorable()))
                 score.Statistics[result] = GetStatistic(result);
 
             score.HitEvents = hitEvents;
         }
-
-        /// <summary>
-        /// Create a <see cref="HitWindows"/> for this processor.
-        /// </summary>
-        [Obsolete("Method is now unused.")] // Can be removed 20210328
-        public virtual HitWindows CreateHitWindows() => new HitWindows();
     }
 
     public enum ScoringMode

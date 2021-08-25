@@ -8,6 +8,7 @@ using JetBrains.Annotations;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Rulesets;
+using osu.Game.Rulesets.Filter;
 using osu.Game.Screens.Select.Filter;
 
 namespace osu.Game.Screens.Select
@@ -23,6 +24,7 @@ namespace osu.Game.Screens.Select
         public OptionalRange<float> ApproachRate;
         public OptionalRange<float> DrainRate;
         public OptionalRange<float> CircleSize;
+        public OptionalRange<float> OverallDifficulty;
         public OptionalRange<double> Length;
         public OptionalRange<double> BPM;
         public OptionalRange<int> BeatDivisor;
@@ -54,7 +56,7 @@ namespace osu.Game.Screens.Select
             set
             {
                 searchText = value;
-                SearchTerms = searchText.Split(new[] { ',', ' ', '!' }, StringSplitOptions.RemoveEmptyEntries).ToArray();
+                SearchTerms = searchText.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToArray();
 
                 SearchNumber = null;
 
@@ -68,6 +70,9 @@ namespace osu.Game.Screens.Select
         /// </summary>
         [CanBeNull]
         public BeatmapCollection Collection;
+
+        [CanBeNull]
+        public IRulesetFilterCriteria RulesetCriteria { get; set; }
 
         public struct OptionalRange<T> : IEquatable<OptionalRange<T>>
             where T : struct

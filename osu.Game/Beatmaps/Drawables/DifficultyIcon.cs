@@ -93,20 +93,20 @@ namespace osu.Game.Beatmaps.Drawables
                 new CircularContainer
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Scale = new Vector2(0.84f),
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Masking = true,
                     EdgeEffect = new EdgeEffectParameters
                     {
-                        Colour = Color4.Black.Opacity(0.08f),
+                        Colour = Color4.Black.Opacity(0.06f),
+
                         Type = EdgeEffectType.Shadow,
-                        Radius = 5,
+                        Radius = 3,
                     },
                     Child = background = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Colour = colours.ForDifficultyRating(beatmap.DifficultyRating) // Default value that will be re-populated once difficulty calculation completes
+                        Colour = colours.ForStarDifficulty(beatmap.StarDifficulty) // Default value that will be re-populated once difficulty calculation completes
                     },
                 },
                 new ConstrainedIconContainer
@@ -124,7 +124,7 @@ namespace osu.Game.Beatmaps.Drawables
             else
                 difficultyBindable.Value = new StarDifficulty(beatmap.StarDifficulty, 0);
 
-            difficultyBindable.BindValueChanged(difficulty => background.Colour = colours.ForDifficultyRating(difficulty.NewValue.DifficultyRating));
+            difficultyBindable.BindValueChanged(difficulty => background.Colour = colours.ForStarDifficulty(difficulty.NewValue.Stars));
         }
 
         public ITooltip GetCustomTooltip() => new DifficultyIconTooltip();
@@ -151,7 +151,7 @@ namespace osu.Game.Beatmaps.Drawables
                 this.mods = mods;
             }
 
-            private IBindable<StarDifficulty> localStarDifficulty;
+            private IBindable<StarDifficulty?> localStarDifficulty;
 
             [BackgroundDependencyLoader]
             private void load()
@@ -160,7 +160,11 @@ namespace osu.Game.Beatmaps.Drawables
                 localStarDifficulty = ruleset != null
                     ? difficultyCache.GetBindableDifficulty(beatmap, ruleset, mods, difficultyCancellation.Token)
                     : difficultyCache.GetBindableDifficulty(beatmap, difficultyCancellation.Token);
-                localStarDifficulty.BindValueChanged(difficulty => StarDifficulty.Value = difficulty.NewValue);
+                localStarDifficulty.BindValueChanged(d =>
+                {
+                    if (d.NewValue is StarDifficulty diff)
+                        StarDifficulty.Value = diff;
+                });
             }
 
             protected override void Dispose(bool isDisposing)
@@ -267,7 +271,7 @@ namespace osu.Game.Beatmaps.Drawables
                 starDifficulty.BindValueChanged(difficulty =>
                 {
                     starRating.Text = $"{difficulty.NewValue.Stars:0.##}";
-                    difficultyFlow.Colour = colours.ForDifficultyRating(difficulty.NewValue.DifficultyRating, true);
+                    difficultyFlow.Colour = colours.ForStarDifficulty(difficulty.NewValue.Stars);
                 }, true);
 
                 return true;

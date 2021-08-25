@@ -2,20 +2,33 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Diagnostics;
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Input;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Platform;
 using osu.Game.Beatmaps;
+using osu.Game.Extensions;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
-using osu.Game.Skinning;
 
 namespace osu.Game.Screens.Edit.Compose
 {
-    public class ComposeScreen : EditorScreenWithTimeline
+    public class ComposeScreen : EditorScreenWithTimeline, IKeyBindingHandler<PlatformAction>
     {
+        [Resolved]
+        private IBindable<WorkingBeatmap> beatmap { get; set; }
+
+        [Resolved]
+        private GameHost host { get; set; }
+
+        [Resolved]
+        private EditorClock clock { get; set; }
+
         private HitObjectComposer composer;
 
         public ComposeScreen()
@@ -59,15 +72,36 @@ namespace osu.Game.Screens.Edit.Compose
         {
             Debug.Assert(ruleset != null);
 
-            var beatmapSkinProvider = new BeatmapSkinProvidingContainer(Beatmap.Value.Skin);
-
-            // the beatmapSkinProvider is used as the fallback source here to allow the ruleset-specific skin implementation
-            // full access to all skin sources.
-            var rulesetSkinProvider = new SkinProvidingContainer(ruleset.CreateLegacySkinProvider(beatmapSkinProvider, EditorBeatmap.PlayableBeatmap));
-
-            // load the skinning hierarchy first.
-            // this is intentionally done in two stages to ensure things are in a loaded state before exposing the ruleset to skin sources.
-            return beatmapSkinProvider.WithChild(rulesetSkinProvider.WithChild(content));
+            return new EditorSkinProvidingContainer(EditorBeatmap).WithChild(content);
         }
+
+        #region Input Handling
+
+        public bool OnPressed(PlatformAction action)
+        {
+            if (action == PlatformAction.Copy)
+                host.GetClipboard().SetText(formatSelectionAsString());
+
+            return false;
+        }
+
+        public void OnReleased(PlatformAction action)
+        {
+        }
+
+        private string formatSelectionAsString()
+        {
+            if (composer == null)
+                return string.Empty;
+
+            double displayTime = EditorBeatmap.SelectedHitObjects.OrderBy(h => h.StartTime).FirstOrDefault()?.StartTime ?? clock.CurrentTime;
+            string selectionAsString = composer.ConvertSelectionToString();
+
+            return !string.IsNullOrEmpty(selectionAsString)
+                ? $"{displayTime.ToEditorFormattedString()} ({selectionAsString}) - "
+                : $"{displayTime.ToEditorFormattedString()} - ";
+        }
+
+        #endregion
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using JetBrains.Annotations;
 using osu.Framework.Allocation;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests;
@@ -17,10 +18,41 @@ namespace osu.Game.Database
         [Resolved]
         private IAPIProvider api { get; set; }
 
+        /// <summary>
+        /// Perform an API lookup on the specified user, populating a <see cref="User"/> model.
+        /// </summary>
+        /// <param name="userId">The user to lookup.</param>
+        /// <param name="token">An optional cancellation token.</param>
+        /// <returns>The populated user, or null if the user does not exist or the request could not be satisfied.</returns>
+        [ItemCanBeNull]
         public Task<User> GetUserAsync(int userId, CancellationToken token = default) => GetAsync(userId, token);
 
+        /// <summary>
+        /// Perform an API lookup on the specified users, populating a <see cref="User"/> model.
+        /// </summary>
+        /// <param name="userIds">The users to lookup.</param>
+        /// <param name="token">An optional cancellation token.</param>
+        /// <returns>The populated users. May include null results for failed retrievals.</returns>
+        public Task<User[]> GetUsersAsync(int[] userIds, CancellationToken token = default)
+        {
+            var userLookupTasks = new List<Task<User>>();
+
+            foreach (var u in userIds)
+            {
+                userLookupTasks.Add(GetUserAsync(u, token).ContinueWith(task =>
+                {
+                    if (!task.IsCompletedSuccessfully)
+                        return null;
+
+                    return task.Result;
+                }, token));
+            }
+
+            return Task.WhenAll(userLookupTasks);
+        }
+
         protected override async Task<User> ComputeValueAsync(int lookup, CancellationToken token = default)
-            => await queryUser(lookup);
+            => await queryUser(lookup).ConfigureAwait(false);
 
         private readonly Queue<(int id, TaskCompletionSource<User>)> pendingUserTasks = new Queue<(int, TaskCompletionSource<User>)>();
         private Task pendingRequestTask;
@@ -72,6 +104,7 @@ namespace osu.Game.Database
             var request = new GetUsersRequest(userTasks.Keys.ToArray());
 
             // rather than queueing, we maintain our own single-threaded request stream.
+            // todo: we probably want retry logic here.
             api.Perform(request);
 
             // Create a new request task if there's still more users to query.
@@ -82,14 +115,19 @@ namespace osu.Game.Database
                     createNewTask();
             }
 
-            foreach (var user in request.Result.Users)
-            {
-                if (userTasks.TryGetValue(user.Id, out var tasks))
-                {
-                    foreach (var task in tasks)
-                        task.SetResult(user);
+            List<User> foundUsers = request.Result?.Users;
 
-                    userTasks.Remove(user.Id);
+            if (foundUsers != null)
+            {
+                foreach (var user in foundUsers)
+                {
+                    if (userTasks.TryGetValue(user.Id, out var tasks))
+                    {
+                        foreach (var task in tasks)
+                            task.SetResult(user);
+
+                        userTasks.Remove(user.Id);
+                    }
                 }
             }
 

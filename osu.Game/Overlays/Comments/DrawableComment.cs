@@ -9,19 +9,19 @@ using osuTK;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Users.Drawables;
 using osu.Game.Graphics.Containers;
-using osu.Game.Utils;
 using osu.Framework.Graphics.Cursor;
 using osu.Framework.Bindables;
 using System.Linq;
 using osu.Game.Graphics.Sprites;
-using osu.Game.Online.Chat;
 using osu.Framework.Allocation;
 using System.Collections.Generic;
 using System;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Extensions.IEnumerableExtensions;
 using System.Collections.Specialized;
+using osu.Framework.Localisation;
 using osu.Game.Overlays.Comments.Buttons;
+using osu.Game.Resources.Localisation.Web;
 
 namespace osu.Game.Overlays.Comments
 {
@@ -61,7 +61,7 @@ namespace osu.Game.Overlays.Comments
         {
             LinkFlowContainer username;
             FillFlowContainer info;
-            LinkFlowContainer message;
+            CommentMarkdownContainer message;
             GridContainer content;
             VotePill votePill;
 
@@ -138,12 +138,13 @@ namespace osu.Game.Overlays.Comments
                                                     AutoSizeAxes = Axes.Both,
                                                     Direction = FillDirection.Horizontal,
                                                     Spacing = new Vector2(10, 0),
-                                                    Children = new Drawable[]
+                                                    Children = new[]
                                                     {
                                                         username = new LinkFlowContainer(s => s.Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold))
                                                         {
                                                             AutoSizeAxes = Axes.Both
                                                         },
+                                                        Comment.Pinned ? new PinnedCommentNotice() : Empty(),
                                                         new ParentUsername(Comment),
                                                         new OsuSpriteText
                                                         {
@@ -153,10 +154,12 @@ namespace osu.Game.Overlays.Comments
                                                         }
                                                     }
                                                 },
-                                                message = new LinkFlowContainer(s => s.Font = OsuFont.GetFont(size: 14))
+                                                message = new CommentMarkdownContainer
                                                 {
                                                     RelativeSizeAxes = Axes.X,
-                                                    AutoSizeAxes = Axes.Y
+                                                    AutoSizeAxes = Axes.Y,
+                                                    DocumentMargin = new MarginPadding(0),
+                                                    DocumentPadding = new MarginPadding(0),
                                                 },
                                                 info = new FillFlowContainer
                                                 {
@@ -245,19 +248,37 @@ namespace osu.Game.Overlays.Comments
 
             if (Comment.EditedAt.HasValue)
             {
-                info.Add(new OsuSpriteText
+                var font = OsuFont.GetFont(size: 12, weight: FontWeight.Regular);
+                var colour = colourProvider.Foreground1;
+
+                info.Add(new FillFlowContainer
                 {
-                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.Regular),
-                    Text = $@"edited {HumanizerUtils.Humanize(Comment.EditedAt.Value)} by {Comment.EditedUser.Username}",
-                    Colour = colourProvider.Foreground1
+                    AutoSizeAxes = Axes.Both,
+                    Children = new Drawable[]
+                    {
+                        new OsuSpriteText
+                        {
+                            Font = font,
+                            Text = "edited ",
+                            Colour = colour
+                        },
+                        new DrawableDate(Comment.EditedAt.Value)
+                        {
+                            Font = font,
+                            Colour = colour
+                        },
+                        new OsuSpriteText
+                        {
+                            Font = font,
+                            Text = $@" by {Comment.EditedUser.Username}",
+                            Colour = colour
+                        },
+                    }
                 });
             }
 
             if (Comment.HasMessage)
-            {
-                var formattedSource = MessageFormatter.FormatText(Comment.Message);
-                message.AddLinks(formattedSource.Text, formattedSource.Links);
-            }
+                message.Text = Comment.Message;
 
             if (Comment.IsDeleted)
             {
@@ -302,9 +323,7 @@ namespace osu.Game.Overlays.Comments
                     this.FadeTo(show.NewValue ? 1 : 0);
             }, true);
             childrenExpanded.BindValueChanged(expanded => childCommentsVisibilityContainer.FadeTo(expanded.NewValue ? 1 : 0), true);
-
             updateButtonsState();
-
             base.LoadComplete();
         }
 
@@ -373,9 +392,36 @@ namespace osu.Game.Overlays.Comments
             };
         }
 
+        private class PinnedCommentNotice : FillFlowContainer
+        {
+            public PinnedCommentNotice()
+            {
+                AutoSizeAxes = Axes.Both;
+                Direction = FillDirection.Horizontal;
+                Spacing = new Vector2(2, 0);
+                Children = new Drawable[]
+                {
+                    new SpriteIcon
+                    {
+                        Icon = FontAwesome.Solid.Thumbtack,
+                        Size = new Vector2(14),
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                    },
+                    new OsuSpriteText
+                    {
+                        Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold),
+                        Text = CommentsStrings.Pinned,
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                    }
+                };
+            }
+        }
+
         private class ParentUsername : FillFlowContainer, IHasTooltip
         {
-            public string TooltipText => getParentMessage();
+            public LocalisableString TooltipText => getParentMessage();
 
             private readonly Comment parentComment;
 
@@ -407,7 +453,7 @@ namespace osu.Game.Overlays.Comments
                 if (parentComment == null)
                     return string.Empty;
 
-                return parentComment.HasMessage ? parentComment.Message : parentComment.IsDeleted ? @"deleted" : string.Empty;
+                return parentComment.HasMessage ? parentComment.Message : parentComment.IsDeleted ? "deleted" : string.Empty;
             }
         }
     }

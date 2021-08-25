@@ -31,7 +31,6 @@ namespace osu.Game.Rulesets.Osu.UI
         private readonly ProxyContainer spinnerProxies;
         private readonly JudgementContainer<DrawableOsuJudgement> judgementLayer;
         private readonly FollowPointRenderer followPoints;
-        private readonly OrderedHitPolicy hitPolicy;
 
         public static readonly Vector2 BASE_SIZE = new Vector2(512, 384);
 
@@ -43,6 +42,9 @@ namespace osu.Game.Rulesets.Osu.UI
 
         public OsuPlayfield()
         {
+            Anchor = Anchor.Centre;
+            Origin = Anchor.Centre;
+
             InternalChildren = new Drawable[]
             {
                 playfieldBorder = new PlayfieldBorder { RelativeSizeAxes = Axes.Both },
@@ -54,16 +56,27 @@ namespace osu.Game.Rulesets.Osu.UI
                 approachCircles = new ProxyContainer { RelativeSizeAxes = Axes.Both },
             };
 
-            hitPolicy = new OrderedHitPolicy(HitObjectContainer);
+            HitPolicy = new StartTimeOrderedHitPolicy();
 
             var hitWindows = new OsuHitWindows();
-
             foreach (var result in Enum.GetValues(typeof(HitResult)).OfType<HitResult>().Where(r => r > HitResult.None && hitWindows.IsHitResultAllowed(r)))
-                poolDictionary.Add(result, new DrawableJudgementPool(result, onJudgmentLoaded));
+                poolDictionary.Add(result, new DrawableJudgementPool(result, onJudgementLoaded));
 
             AddRangeInternal(poolDictionary.Values);
 
             NewResult += onNewResult;
+        }
+
+        private IHitPolicy hitPolicy;
+
+        public IHitPolicy HitPolicy
+        {
+            get => hitPolicy;
+            set
+            {
+                hitPolicy = value ?? throw new ArgumentNullException(nameof(value));
+                hitPolicy.HitObjectContainer = HitObjectContainer;
+            }
         }
 
         protected override void OnNewDrawableHitObject(DrawableHitObject drawable)
@@ -89,9 +102,9 @@ namespace osu.Game.Rulesets.Osu.UI
             }
         }
 
-        private void onJudgmentLoaded(DrawableOsuJudgement judgement)
+        private void onJudgementLoaded(DrawableOsuJudgement judgement)
         {
-            judgementAboveHitObjectLayer.Add(judgement.GetProxyAboveHitObjectsContent());
+            judgementAboveHitObjectLayer.Add(judgement.ProxiedAboveHitObjectsContent);
         }
 
         [BackgroundDependencyLoader(true)]
@@ -137,6 +150,10 @@ namespace osu.Game.Rulesets.Osu.UI
             DrawableOsuJudgement explosion = poolDictionary[result.Type].Get(doj => doj.Apply(result, judgedObject));
 
             judgementLayer.Add(explosion);
+
+            // the proxied content is added to judgementAboveHitObjectLayer once, on first load, and never removed from it.
+            // ensure that ordering is consistent with expectations (latest judgement should be front-most).
+            judgementAboveHitObjectLayer.ChangeChildDepth(explosion.ProxiedAboveHitObjectsContent, (float)-result.TimeAbsolute);
         }
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) => HitObjectContainer.ReceivePositionalInputAt(screenSpacePos);

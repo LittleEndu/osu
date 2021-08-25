@@ -42,6 +42,7 @@ namespace osu.Game.Screens.Select.Carousel
             match &= !criteria.ApproachRate.HasFilter || criteria.ApproachRate.IsInRange(Beatmap.BaseDifficulty.ApproachRate);
             match &= !criteria.DrainRate.HasFilter || criteria.DrainRate.IsInRange(Beatmap.BaseDifficulty.DrainRate);
             match &= !criteria.CircleSize.HasFilter || criteria.CircleSize.IsInRange(Beatmap.BaseDifficulty.CircleSize);
+            match &= !criteria.OverallDifficulty.HasFilter || criteria.OverallDifficulty.IsInRange(Beatmap.BaseDifficulty.OverallDifficulty);
             match &= !criteria.Length.HasFilter || criteria.Length.IsInRange(Beatmap.Length);
             match &= !criteria.BPM.HasFilter || criteria.BPM.IsInRange(Beatmap.BPM);
 
@@ -72,6 +73,9 @@ namespace osu.Game.Screens.Select.Carousel
 
             if (match)
                 match &= criteria.Collection?.Beatmaps.Contains(Beatmap) ?? true;
+
+            if (match && criteria.RulesetCriteria != null)
+                match &= criteria.RulesetCriteria.Matches(Beatmap);
 
             Filtered.Value = !match;
         }

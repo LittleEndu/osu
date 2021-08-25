@@ -5,46 +5,53 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Annotations;
+using osu.Framework.Localisation;
 using static osu.Game.Users.User;
 
 namespace osu.Game.Overlays.Profile.Sections.Historical
 {
     public class UserHistoryGraph : UserGraph<DateTime, long>
     {
+        private readonly LocalisableString tooltipCounterName;
+
         [CanBeNull]
         public UserHistoryCount[] Values
         {
             set => Data = value?.Select(v => new KeyValuePair<DateTime, long>(v.Date, v.Count)).ToArray();
         }
 
-        /// <summary>
-        /// Text describing the value being plotted on the graph, which will be displayed as a prefix to the value in the <see cref="HistoryGraphTooltip"/>.
-        /// </summary>
-        public string TooltipCounterName { get; set; } = "Plays";
+        public UserHistoryGraph(LocalisableString tooltipCounterName)
+        {
+            this.tooltipCounterName = tooltipCounterName;
+        }
 
         protected override float GetDataPointHeight(long playCount) => playCount;
 
-        protected override UserGraphTooltip GetTooltip() => new HistoryGraphTooltip(TooltipCounterName);
+        protected override UserGraphTooltip GetTooltip() => new HistoryGraphTooltip(tooltipCounterName);
 
         protected override object GetTooltipContent(DateTime date, long playCount)
         {
             return new TooltipDisplayContent
             {
-                Count = playCount.ToString("N0"),
-                Date = date.ToString("MMMM yyyy")
+                Name = tooltipCounterName,
+                Count = playCount.ToLocalisableString("N0"),
+                Date = date.ToLocalisableString("MMMM yyyy")
             };
         }
 
         protected class HistoryGraphTooltip : UserGraphTooltip
         {
-            public HistoryGraphTooltip(string tooltipCounterName)
+            private readonly LocalisableString tooltipCounterName;
+
+            public HistoryGraphTooltip(LocalisableString tooltipCounterName)
                 : base(tooltipCounterName)
             {
+                this.tooltipCounterName = tooltipCounterName;
             }
 
             public override bool SetContent(object content)
             {
-                if (!(content is TooltipDisplayContent info))
+                if (!(content is TooltipDisplayContent info) || info.Name != tooltipCounterName)
                     return false;
 
                 Counter.Text = info.Count;
@@ -55,8 +62,9 @@ namespace osu.Game.Overlays.Profile.Sections.Historical
 
         private class TooltipDisplayContent
         {
-            public string Count;
-            public string Date;
+            public LocalisableString Name;
+            public LocalisableString Count;
+            public LocalisableString Date;
         }
     }
 }

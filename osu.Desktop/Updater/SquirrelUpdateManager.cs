@@ -42,7 +42,7 @@ namespace osu.Desktop.Updater
             Splat.Locator.CurrentMutable.Register(() => new SquirrelLogger(), typeof(Splat.ILogger));
         }
 
-        protected override async Task<bool> PerformUpdateCheck() => await checkForUpdateAsync();
+        protected override async Task<bool> PerformUpdateCheck() => await checkForUpdateAsync().ConfigureAwait(false);
 
         private async Task<bool> checkForUpdateAsync(bool useDeltaPatching = true, UpdateProgressNotification notification = null)
         {
@@ -51,9 +51,9 @@ namespace osu.Desktop.Updater
 
             try
             {
-                updateManager ??= await UpdateManager.GitHubUpdateManager(@"https://github.com/ppy/osu", @"osulazer", null, null, true);
+                updateManager ??= await UpdateManager.GitHubUpdateManager(@"https://github.com/ppy/osu", @"osulazer", null, null, true).ConfigureAwait(false);
 
-                var info = await updateManager.CheckForUpdate(!useDeltaPatching);
+                var info = await updateManager.CheckForUpdate(!useDeltaPatching).ConfigureAwait(false);
 
                 if (info.ReleasesToApply.Count == 0)
                 {
@@ -68,6 +68,8 @@ namespace osu.Desktop.Updater
                     return false;
                 }
 
+                scheduleRecheck = false;
+
                 if (notification == null)
                 {
                     notification = new UpdateProgressNotification(this) { State = ProgressNotificationState.Active };
@@ -79,12 +81,12 @@ namespace osu.Desktop.Updater
 
                 try
                 {
-                    await updateManager.DownloadReleases(info.ReleasesToApply, p => notification.Progress = p / 100f);
+                    await updateManager.DownloadReleases(info.ReleasesToApply, p => notification.Progress = p / 100f).ConfigureAwait(false);
 
                     notification.Progress = 0;
                     notification.Text = @"Installing update...";
 
-                    await updateManager.ApplyReleases(info, p => notification.Progress = p / 100f);
+                    await updateManager.ApplyReleases(info, p => notification.Progress = p / 100f).ConfigureAwait(false);
 
                     notification.State = ProgressNotificationState.Completed;
                     updatePending = true;
@@ -97,8 +99,7 @@ namespace osu.Desktop.Updater
 
                         // could fail if deltas are unavailable for full update path (https://github.com/Squirrel/Squirrel.Windows/issues/959)
                         // try again without deltas.
-                        await checkForUpdateAsync(false, notification);
-                        scheduleRecheck = false;
+                        await checkForUpdateAsync(false, notification).ConfigureAwait(false);
                     }
                     else
                     {
@@ -110,13 +111,14 @@ namespace osu.Desktop.Updater
             catch (Exception)
             {
                 // we'll ignore this and retry later. can be triggered by no internet connection or thread abortion.
+                scheduleRecheck = true;
             }
             finally
             {
                 if (scheduleRecheck)
                 {
                     // check again in 30 minutes.
-                    Scheduler.AddDelayed(async () => await checkForUpdateAsync(), 60000 * 30);
+                    Scheduler.AddDelayed(() => Task.Run(async () => await checkForUpdateAsync().ConfigureAwait(false)), 60000 * 30);
                 }
             }
 
@@ -141,7 +143,7 @@ namespace osu.Desktop.Updater
                 Activated = () =>
                 {
                     updateManager.PrepareUpdateAsync()
-                                 .ContinueWith(_ => updateManager.Schedule(() => game.GracefullyExit()));
+                                 .ContinueWith(_ => updateManager.Schedule(() => game?.GracefullyExit()));
                     return true;
                 };
             }

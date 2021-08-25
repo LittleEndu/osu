@@ -4,14 +4,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using JetBrains.Annotations;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Localisation;
 using osu.Game.Skinning;
+using osu.Game.Skinning.Editor;
 using osuTK;
 
 namespace osu.Game.Overlays.Settings.Sections
@@ -20,7 +24,7 @@ namespace osu.Game.Overlays.Settings.Sections
     {
         private SkinSettingsDropdown skinDropdown;
 
-        public override string Header => "Skin";
+        public override LocalisableString Header => SkinSettingsStrings.SkinSectionHeader;
 
         public override Drawable CreateIcon() => new SpriteIcon
         {
@@ -38,40 +42,62 @@ namespace osu.Game.Overlays.Settings.Sections
 
         private List<SkinInfo> skinItems;
 
+        private int firstNonDefaultSkinIndex
+        {
+            get
+            {
+                var index = skinItems.FindIndex(s => s.ID > 0);
+                if (index < 0)
+                    index = skinItems.Count;
+
+                return index;
+            }
+        }
+
         [Resolved]
         private SkinManager skins { get; set; }
 
         private IBindable<WeakReference<SkinInfo>> managerUpdated;
         private IBindable<WeakReference<SkinInfo>> managerRemoved;
 
-        [BackgroundDependencyLoader]
-        private void load(OsuConfigManager config)
+        [BackgroundDependencyLoader(permitNulls: true)]
+        private void load(OsuConfigManager config, [CanBeNull] SkinEditorOverlay skinEditor)
         {
             FlowContent.Spacing = new Vector2(0, 5);
 
             Children = new Drawable[]
             {
                 skinDropdown = new SkinSettingsDropdown(),
+                new SettingsButton
+                {
+                    Text = SkinSettingsStrings.SkinLayoutEditor,
+                    Action = () => skinEditor?.Toggle(),
+                },
                 new ExportSkinButton(),
                 new SettingsSlider<float, SizeSlider>
                 {
-                    LabelText = "Gameplay cursor size",
+                    LabelText = SkinSettingsStrings.GameplayCursorSize,
                     Current = config.GetBindable<float>(OsuSetting.GameplayCursorSize),
                     KeyboardStep = 0.01f
                 },
                 new SettingsCheckbox
                 {
-                    LabelText = "Adjust gameplay cursor size based on current beatmap",
+                    LabelText = SkinSettingsStrings.AutoCursorSize,
                     Current = config.GetBindable<bool>(OsuSetting.AutoCursorSize)
                 },
                 new SettingsCheckbox
                 {
-                    LabelText = "Beatmap skins",
+                    LabelText = SkinSettingsStrings.BeatmapSkins,
                     Current = config.GetBindable<bool>(OsuSetting.BeatmapSkins)
                 },
                 new SettingsCheckbox
                 {
-                    LabelText = "Beatmap hitsounds",
+                    LabelText = SkinSettingsStrings.BeatmapColours,
+                    Current = config.GetBindable<bool>(OsuSetting.BeatmapColours)
+                },
+                new SettingsCheckbox
+                {
+                    LabelText = SkinSettingsStrings.BeatmapHitsounds,
                     Current = config.GetBindable<bool>(OsuSetting.BeatmapHitsounds)
                 },
             };
@@ -91,7 +117,7 @@ namespace osu.Game.Overlays.Settings.Sections
             if (skinDropdown.Items.All(s => s.ID != configBindable.Value))
                 configBindable.Value = 0;
 
-            configBindable.BindValueChanged(id => dropdownBindable.Value = skinDropdown.Items.Single(s => s.ID == id.NewValue), true);
+            configBindable.BindValueChanged(id => Scheduler.AddOnce(updateSelectedSkinFromConfig), true);
             dropdownBindable.BindValueChanged(skin =>
             {
                 if (skin.NewValue == random_skin_info)
@@ -104,24 +130,42 @@ namespace osu.Game.Overlays.Settings.Sections
             });
         }
 
+        private void updateSelectedSkinFromConfig()
+        {
+            int id = configBindable.Value;
+
+            var skin = skinDropdown.Items.FirstOrDefault(s => s.ID == id);
+
+            if (skin == null)
+            {
+                // there may be a thread race condition where an item is selected that hasn't yet been added to the dropdown.
+                // to avoid adding complexity, let's just ensure the item is added so we can perform the selection.
+                skin = skins.Query(s => s.ID == id);
+                addItem(skin);
+            }
+
+            dropdownBindable.Value = skin;
+        }
+
         private void updateItems()
         {
             skinItems = skins.GetAllUsableSkins();
-
-            // insert after lazer built-in skins
-            int firstNonDefault = skinItems.FindIndex(s => s.ID > 0);
-            if (firstNonDefault < 0)
-                firstNonDefault = skinItems.Count;
-
-            skinItems.Insert(firstNonDefault, random_skin_info);
-
+            skinItems.Insert(firstNonDefaultSkinIndex, random_skin_info);
+            sortUserSkins(skinItems);
             skinDropdown.Items = skinItems;
         }
 
         private void itemUpdated(ValueChangedEvent<WeakReference<SkinInfo>> weakItem)
         {
             if (weakItem.NewValue.TryGetTarget(out var item))
-                Schedule(() => skinDropdown.Items = skinDropdown.Items.Where(i => !i.Equals(item)).Append(item).ToArray());
+                Schedule(() => addItem(item));
+        }
+
+        private void addItem(SkinInfo item)
+        {
+            List<SkinInfo> newDropdownItems = skinDropdown.Items.Where(i => !i.Equals(item)).Append(item).ToList();
+            sortUserSkins(newDropdownItems);
+            skinDropdown.Items = newDropdownItems;
         }
 
         private void itemRemoved(ValueChangedEvent<WeakReference<SkinInfo>> weakItem)
@@ -130,13 +174,20 @@ namespace osu.Game.Overlays.Settings.Sections
                 Schedule(() => skinDropdown.Items = skinDropdown.Items.Where(i => i.ID != item.ID).ToArray());
         }
 
+        private void sortUserSkins(List<SkinInfo> skinsList)
+        {
+            // Sort user skins separately from built-in skins
+            skinsList.Sort(firstNonDefaultSkinIndex, skinsList.Count - firstNonDefaultSkinIndex,
+                Comparer<SkinInfo>.Create((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)));
+        }
+
         private class SkinSettingsDropdown : SettingsDropdown<SkinInfo>
         {
             protected override OsuDropdown<SkinInfo> CreateDropdown() => new SkinDropdownControl();
 
             private class SkinDropdownControl : DropdownControl
             {
-                protected override string GenerateItemText(SkinInfo item) => item.ToString();
+                protected override LocalisableString GenerateItemText(SkinInfo item) => item.ToString();
             }
         }
 
@@ -150,7 +201,7 @@ namespace osu.Game.Overlays.Settings.Sections
             [BackgroundDependencyLoader]
             private void load()
             {
-                Text = "Export selected skin";
+                Text = SkinSettingsStrings.ExportSkinButton;
                 Action = export;
 
                 currentSkin = skins.CurrentSkin.GetBoundCopy();

@@ -50,29 +50,25 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
                 { HitResult.Miss, "mania-hit0" }
             };
 
-        private Lazy<bool> isLegacySkin;
+        private readonly Lazy<bool> isLegacySkin;
 
         /// <summary>
         /// Whether texture for the keys exists.
         /// Used to determine if the mania ruleset is skinned.
         /// </summary>
-        private Lazy<bool> hasKeyTexture;
+        private readonly Lazy<bool> hasKeyTexture;
 
-        public ManiaLegacySkinTransformer(ISkinSource source, IBeatmap beatmap)
-            : base(source)
+        public ManiaLegacySkinTransformer(ISkin skin, IBeatmap beatmap)
+            : base(skin)
         {
             this.beatmap = (ManiaBeatmap)beatmap;
 
-            Source.SourceChanged += sourceChanged;
-            sourceChanged();
-        }
-
-        private void sourceChanged()
-        {
-            isLegacySkin = new Lazy<bool>(() => Source.GetConfig<LegacySkinConfiguration.LegacySetting, decimal>(LegacySkinConfiguration.LegacySetting.Version) != null);
-            hasKeyTexture = new Lazy<bool>(() => Source.GetAnimation(
-                this.GetManiaSkinConfig<string>(LegacyManiaSkinConfigurationLookups.KeyImage, 0)?.Value
-                ?? "mania-key1", true, true) != null);
+            isLegacySkin = new Lazy<bool>(() => GetConfig<LegacySkinConfiguration.LegacySetting, decimal>(LegacySkinConfiguration.LegacySetting.Version) != null);
+            hasKeyTexture = new Lazy<bool>(() =>
+            {
+                var keyImage = this.GetManiaSkinConfig<string>(LegacyManiaSkinConfigurationLookups.KeyImage, 0)?.Value ?? "mania-key1";
+                return this.GetAnimation(keyImage, true, true) != null;
+            });
         }
 
         public override Drawable GetDrawableComponent(ISkinComponent component)
@@ -125,7 +121,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
                     break;
             }
 
-            return null;
+            return base.GetDrawableComponent(component);
         }
 
         private Drawable getResult(HitResult result)
@@ -140,21 +136,21 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
             return animation == null ? null : new LegacyManiaJudgementPiece(result, animation);
         }
 
-        public override SampleChannel GetSample(ISampleInfo sampleInfo)
+        public override ISample GetSample(ISampleInfo sampleInfo)
         {
             // layered hit sounds never play in mania
             if (sampleInfo is ConvertHitObjectParser.LegacyHitSampleInfo legacySample && legacySample.IsLayered)
-                return new SampleChannelVirtual();
+                return new SampleVirtual();
 
-            return Source.GetSample(sampleInfo);
+            return base.GetSample(sampleInfo);
         }
 
         public override IBindable<TValue> GetConfig<TLookup, TValue>(TLookup lookup)
         {
             if (lookup is ManiaSkinConfigurationLookup maniaLookup)
-                return Source.GetConfig<LegacyManiaSkinConfigurationLookup, TValue>(new LegacyManiaSkinConfigurationLookup(beatmap.TotalColumns, maniaLookup.Lookup, maniaLookup.TargetColumn));
+                return base.GetConfig<LegacyManiaSkinConfigurationLookup, TValue>(new LegacyManiaSkinConfigurationLookup(beatmap.TotalColumns, maniaLookup.Lookup, maniaLookup.TargetColumn));
 
-            return Source.GetConfig<TLookup, TValue>(lookup);
+            return base.GetConfig<TLookup, TValue>(lookup);
         }
     }
 }

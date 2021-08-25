@@ -46,10 +46,21 @@ namespace osu.Game.Screens.Edit
 
         public readonly IBeatmap PlayableBeatmap;
 
-        public readonly ISkin BeatmapSkin;
+        /// <summary>
+        /// Whether at least one timing control point is present and providing timing information.
+        /// </summary>
+        public IBindable<bool> HasTiming => hasTiming;
+
+        private readonly Bindable<bool> hasTiming = new Bindable<bool>();
+
+        [CanBeNull]
+        public readonly EditorBeatmapSkin BeatmapSkin;
 
         [Resolved]
         private BindableBeatDivisor beatDivisor { get; set; }
+
+        [Resolved]
+        private EditorClock editorClock { get; set; }
 
         private readonly IBeatmapProcessor beatmapProcessor;
 
@@ -58,7 +69,8 @@ namespace osu.Game.Screens.Edit
         public EditorBeatmap(IBeatmap playableBeatmap, ISkin beatmapSkin = null)
         {
             PlayableBeatmap = playableBeatmap;
-            BeatmapSkin = beatmapSkin;
+            if (beatmapSkin is Skin skin)
+                BeatmapSkin = new EditorBeatmapSkin(skin);
 
             beatmapProcessor = playableBeatmap.BeatmapInfo.Ruleset?.CreateInstance().CreateBeatmapProcessor(PlayableBeatmap);
 
@@ -74,7 +86,11 @@ namespace osu.Game.Screens.Edit
 
         public BeatmapMetadata Metadata => PlayableBeatmap.Metadata;
 
-        public ControlPointInfo ControlPointInfo => PlayableBeatmap.ControlPointInfo;
+        public ControlPointInfo ControlPointInfo
+        {
+            get => PlayableBeatmap.ControlPointInfo;
+            set => PlayableBeatmap.ControlPointInfo = value;
+        }
 
         public List<BreakPeriod> Breaks => PlayableBeatmap.Breaks;
 
@@ -83,6 +99,8 @@ namespace osu.Game.Screens.Edit
         public IReadOnlyList<HitObject> HitObjects => PlayableBeatmap.HitObjects;
 
         public IEnumerable<BeatmapStatistic> GetStatistics() => PlayableBeatmap.GetStatistics();
+
+        public double GetMostCommonBeatLength() => PlayableBeatmap.GetMostCommonBeatLength();
 
         public IBeatmap Clone() => (EditorBeatmap)MemberwiseClone();
 
@@ -93,6 +111,22 @@ namespace osu.Game.Screens.Edit
         private readonly List<HitObject> batchPendingDeletes = new List<HitObject>();
 
         private readonly HashSet<HitObject> batchPendingUpdates = new HashSet<HitObject>();
+
+        /// <summary>
+        /// Perform the provided action on every selected hitobject.
+        /// Changes will be grouped as one history action.
+        /// </summary>
+        /// <param name="action">The action to perform.</param>
+        public void PerformOnSelection(Action<HitObject> action)
+        {
+            if (SelectedHitObjects.Count == 0)
+                return;
+
+            BeginChange();
+            foreach (var h in SelectedHitObjects)
+                action(h);
+            EndChange();
+        }
 
         /// <summary>
         /// Adds a collection of <see cref="HitObject"/>s to this <see cref="EditorBeatmap"/>.
@@ -215,6 +249,8 @@ namespace osu.Game.Screens.Edit
 
             if (batchPendingUpdates.Count > 0)
                 UpdateState();
+
+            hasTiming.Value = !ReferenceEquals(ControlPointInfo.TimingPointAt(editorClock.CurrentTime), TimingControlPoint.DEFAULT);
         }
 
         protected override void UpdateState()
@@ -278,13 +314,7 @@ namespace osu.Game.Screens.Edit
             return list.Count - 1;
         }
 
-        public double SnapTime(double time, double? referenceTime)
-        {
-            var timingPoint = ControlPointInfo.TimingPointAt(referenceTime ?? time);
-            var beatLength = timingPoint.BeatLength / BeatDivisor;
-
-            return timingPoint.Time + (int)Math.Round((time - timingPoint.Time) / beatLength, MidpointRounding.AwayFromZero) * beatLength;
-        }
+        public double SnapTime(double time, double? referenceTime) => ControlPointInfo.GetClosestSnappedTime(time, BeatDivisor, referenceTime);
 
         public double GetBeatLengthAtTime(double referenceTime) => ControlPointInfo.TimingPointAt(referenceTime).BeatLength / BeatDivisor;
 

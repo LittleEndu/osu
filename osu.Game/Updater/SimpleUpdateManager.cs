@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using osu.Framework;
@@ -37,15 +38,20 @@ namespace osu.Game.Updater
             {
                 var releases = new OsuJsonWebRequest<GitHubRelease>("https://api.github.com/repos/ppy/osu/releases/latest");
 
-                await releases.PerformAsync();
+                await releases.PerformAsync().ConfigureAwait(false);
 
                 var latest = releases.ResponseObject;
 
-                if (latest.TagName != version)
+                // avoid any discrepancies due to build suffixes for now.
+                // eventually we will want to support release streams and consider these.
+                version = version.Split('-').First();
+                var latestTagName = latest.TagName.Split('-').First();
+
+                if (latestTagName != version)
                 {
                     Notifications.Post(new SimpleNotification
                     {
-                        Text = $"A newer release of osu! has been found ({version} → {latest.TagName}).\n\n"
+                        Text = $"A newer release of osu! has been found ({version} → {latestTagName}).\n\n"
                                + "Click here to download the new version, which can be installed over the top of your existing installation",
                         Icon = FontAwesome.Solid.Upload,
                         Activated = () =>
@@ -77,7 +83,7 @@ namespace osu.Game.Updater
                     bestAsset = release.Assets?.Find(f => f.Name.EndsWith(".exe", StringComparison.Ordinal));
                     break;
 
-                case RuntimeInfo.Platform.MacOsx:
+                case RuntimeInfo.Platform.macOS:
                     bestAsset = release.Assets?.Find(f => f.Name.EndsWith(".app.zip", StringComparison.Ordinal));
                     break;
 

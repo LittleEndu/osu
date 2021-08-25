@@ -11,18 +11,20 @@ using osu.Game.Graphics.Containers;
 using System;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Localisation;
 using osu.Framework.Threading;
 using osu.Game.Graphics;
+using osu.Game.Localisation;
 
 namespace osu.Game.Overlays
 {
     public class NotificationOverlay : OsuFocusedOverlayContainer, INamedOverlayComponent
     {
         public string IconTexture => "Icons/Hexacons/notification";
-        public string Title => "notifications";
-        public string Description => "waiting for 'ya";
+        public LocalisableString Title => NotificationsStrings.HeaderTitle;
+        public LocalisableString Description => NotificationsStrings.HeaderDescription;
 
-        private const float width = 320;
+        public const float WIDTH = 320;
 
         public const float TRANSITION_LENGTH = 600;
 
@@ -36,7 +38,8 @@ namespace osu.Game.Overlays
         [BackgroundDependencyLoader]
         private void load()
         {
-            Width = width;
+            X = WIDTH;
+            Width = WIDTH;
             RelativeSizeAxes = Axes.Y;
 
             Children = new Drawable[]
@@ -150,7 +153,7 @@ namespace osu.Game.Overlays
 
             markAllRead();
 
-            this.MoveToX(width, TRANSITION_LENGTH, Easing.OutQuint);
+            this.MoveToX(WIDTH, TRANSITION_LENGTH, Easing.OutQuint);
             this.FadeTo(0, TRANSITION_LENGTH, Easing.OutQuint);
         }
 

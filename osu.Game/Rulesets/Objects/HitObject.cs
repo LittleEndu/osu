@@ -118,6 +118,7 @@ namespace osu.Game.Rulesets.Objects
                 foreach (var n in NestedHitObjects.OfType<IHasComboInformation>())
                 {
                     n.ComboIndexBindable.BindTo(hasCombo.ComboIndexBindable);
+                    n.ComboIndexWithOffsetsBindable.BindTo(hasCombo.ComboIndexWithOffsetsBindable);
                     n.IndexInCurrentComboBindable.BindTo(hasCombo.IndexInCurrentComboBindable);
                 }
             }
@@ -139,15 +140,6 @@ namespace osu.Game.Rulesets.Objects
         }
 
         protected virtual void CreateNestedHitObjects(CancellationToken cancellationToken)
-        {
-            // ReSharper disable once MethodSupportsCancellation (https://youtrack.jetbrains.com/issue/RIDER-44520)
-#pragma warning disable 618
-            CreateNestedHitObjects();
-#pragma warning restore 618
-        }
-
-        [Obsolete("Use the cancellation-supporting override")] // Can be removed 20210318
-        protected virtual void CreateNestedHitObjects()
         {
         }
 

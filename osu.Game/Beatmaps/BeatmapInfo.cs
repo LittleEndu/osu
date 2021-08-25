@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using Newtonsoft.Json;
+using osu.Framework.Localisation;
 using osu.Framework.Testing;
 using osu.Game.Database;
 using osu.Game.IO.Serialization;
@@ -82,7 +83,6 @@ namespace osu.Game.Beatmaps
 
         // General
         public double AudioLeadIn { get; set; }
-        public bool Countdown { get; set; } = true;
         public float StackLeniency { get; set; } = 0.7f;
         public bool SpecialStyle { get; set; }
 
@@ -93,6 +93,13 @@ namespace osu.Game.Beatmaps
         public bool LetterboxInBreaks { get; set; }
         public bool WidescreenStoryboard { get; set; }
         public bool EpilepsyWarning { get; set; }
+
+        public CountdownType Countdown { get; set; } = CountdownType.Normal;
+
+        /// <summary>
+        /// The number of beats to move the countdown backwards (compared to its default location).
+        /// </summary>
+        public int CountdownOffset { get; set; }
 
         // Editor
         // This bookmarks stuff is necessary because DB doesn't know how to store int[]
@@ -127,6 +134,8 @@ namespace osu.Game.Beatmaps
         // Metadata
         public string Version { get; set; }
 
+        private string versionString => string.IsNullOrEmpty(Version) ? string.Empty : $"[{Version}]";
+
         [JsonProperty("difficulty_rating")]
         public double StarDifficulty { get; set; }
 
@@ -143,11 +152,12 @@ namespace osu.Game.Beatmaps
             Version
         }.Concat(Metadata?.SearchableTerms ?? Enumerable.Empty<string>()).Where(s => !string.IsNullOrEmpty(s)).ToArray();
 
-        public override string ToString()
-        {
-            string version = string.IsNullOrEmpty(Version) ? string.Empty : $"[{Version}]";
+        public override string ToString() => $"{Metadata ?? BeatmapSet?.Metadata} {versionString}".Trim();
 
-            return $"{Metadata} {version}".Trim();
+        public RomanisableString ToRomanisableString()
+        {
+            var metadata = (Metadata ?? BeatmapSet?.Metadata)?.ToRomanisableString() ?? new RomanisableString(null, null);
+            return new RomanisableString($"{metadata.GetPreferred(true)} {versionString}".Trim(), $"{metadata.GetPreferred(false)} {versionString}".Trim());
         }
 
         public bool Equals(BeatmapInfo other)
