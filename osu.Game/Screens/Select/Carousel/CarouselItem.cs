@@ -24,15 +24,6 @@ namespace osu.Game.Screens.Select.Carousel
         /// </summary>
         public bool Visible => State.Value != CarouselItemState.Collapsed && !Filtered.Value;
 
-        protected CarouselItem()
-        {
-            Filtered.ValueChanged += filtered =>
-            {
-                if (filtered.NewValue && State.Value == CarouselItemState.Selected)
-                    State.Value = CarouselItemState.NotSelected;
-            };
-        }
-
         /// <summary>
         /// Used as a default sort method for <see cref="CarouselItem"/>s of differing types.
         /// </summary>
