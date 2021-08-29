@@ -607,6 +607,9 @@ namespace osu.Game.Screens.Select
 
                 if (visibleItems.Count > 0)
                 {
+                    if (visibleItems.Count == 1)
+                        visibleItems[0].State.Value = CarouselItemState.Selected;
+
                     var toDisplay = visibleItems.GetRange(displayedRange.first, displayedRange.last - displayedRange.first + 1);
 
                     foreach (var panel in Scroll.Children)
