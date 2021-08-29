@@ -747,14 +747,10 @@ namespace osu.Game.Screens.Select
 
             foreach (CarouselItem item in root.Children)
             {
-                if (item.Filtered.Value)
-                    continue;
-
                 switch (item)
                 {
                     case CarouselBeatmapSet set:
                     {
-                        visibleItems.Add(set);
                         set.CarouselYPosition = currentY;
 
                         if (item.State.Value == CarouselItemState.Selected)
@@ -778,6 +774,11 @@ namespace osu.Game.Screens.Select
                                 scrollTarget += b.TotalHeight;
                             }
                         }
+
+                        if (item.Filtered.Value)
+                            continue;
+
+                        visibleItems.Add(set);
 
                         currentY += set.TotalHeight + panel_padding;
                         break;
