@@ -35,6 +35,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
 
         private Container circleSprites;
         private Drawable hitCircleSprite;
+        public Container ReverseArrowContainer;
         private Drawable hitCircleOverlay;
 
         private SkinnableSpriteText hitCircleText;
@@ -85,6 +86,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
                         },
+                        priorityLookup == "sliderstartcircle" ? ReverseArrowContainer = new Container() : Empty(),
                         hitCircleOverlay = new KiaiFlashingSprite
                         {
                             Texture = overlayTexture,

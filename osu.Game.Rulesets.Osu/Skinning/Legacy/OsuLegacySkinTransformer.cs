@@ -108,6 +108,12 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
                             return new LegacyOldStyleSpinner();
 
                         return null;
+
+                    case OsuSkinComponents.ReverseArrow:
+                        if (hasHitCircle.Value)
+                            return new LegacyReverseArrow();
+
+                        return null;
                 }
             }
 
