@@ -23,6 +23,7 @@ using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Input.Bindings;
 using osu.Game.Screens.Select.Carousel;
+using osu.Game.Screens.Select.Filter;
 using osuTK;
 using osuTK.Input;
 
@@ -400,6 +401,7 @@ namespace osu.Game.Screens.Select
         }
 
         private FilterCriteria activeCriteria = new FilterCriteria();
+        private bool currentlyGrouping => activeCriteria.Group != GroupMode.All && activeCriteria.Group != GroupMode.NoGrouping;
 
         protected ScheduledDelegate PendingFilter;
 
@@ -461,12 +463,80 @@ namespace osu.Game.Screens.Select
             {
                 PendingFilter = null;
 
+                transferGroupedSets();
+
                 root.Filter(activeCriteria);
                 itemsCache.Invalidate();
 
                 if (alwaysResetScrollPosition || !Scroll.UserScrolling)
                     ScrollToSelected(true);
             }
+        }
+
+        private void transferGroupedSets()
+        {
+            var currentlySelectedBeatmap = SelectedBeatmap;
+
+            if (currentlyGrouping && !root.IsGrouping)
+            {
+                List<BeatmapSetInfo> newSets = new List<BeatmapSetInfo>();
+
+                foreach (var set in beatmapSets)
+                {
+                    foreach (var beatmap in set.Beatmaps)
+                    {
+                        BeatmapSetInfo falseInfo = CreateSingleInfoForBeatmap(set.BeatmapSet, beatmap.Beatmap);
+                        newSets.Add(falseInfo);
+                    }
+                }
+
+                loadBeatmapSets(newSets);
+                root.IsGrouping = true;
+            }
+
+            if (!currentlyGrouping && root.IsGrouping)
+            {
+                List<BeatmapSetInfo> newSets = new List<BeatmapSetInfo>();
+
+                foreach (var set in beatmapSets)
+                {
+                    foreach (var beatmap in set.Beatmaps)
+                    {
+                        BeatmapSetInfo currentInfo = newSets.LastOrDefault(s => set.BeatmapSet.Equals(s));
+
+                        if (currentInfo == null)
+                        {
+                            currentInfo = set.BeatmapSet;
+                            currentInfo.Beatmaps.Clear();
+                            newSets.Add(currentInfo);
+                        }
+
+                        currentInfo.Beatmaps.Add(beatmap.Beatmap);
+                    }
+                }
+
+                loadBeatmapSets(newSets);
+                root.IsGrouping = false;
+            }
+
+            SelectBeatmap(currentlySelectedBeatmap);
+        }
+
+        public BeatmapSetInfo CreateSingleInfoForBeatmap(BeatmapSetInfo set, BeatmapInfo beatmap)
+        {
+            BeatmapSetInfo falseInfo = new BeatmapSetInfo
+            {
+                ID = set.ID,
+                OnlineBeatmapSetID = set.OnlineBeatmapSetID,
+                DateAdded = set.DateAdded,
+                Status = set.Status,
+                Metadata = set.Metadata,
+                Beatmaps = new List<BeatmapInfo> { beatmap },
+                OnlineInfo = set.OnlineInfo,
+                Metrics = set.Metrics,
+                Protected = set.Protected
+            };
+            return falseInfo;
         }
 
         private float? scrollTarget;
@@ -899,6 +969,7 @@ namespace osu.Game.Screens.Select
         private class CarouselRoot : CarouselGroupEagerSelect
         {
             private readonly BeatmapCarousel carousel;
+            public bool IsGrouping;
 
             public CarouselRoot(BeatmapCarousel carousel)
             {
@@ -915,6 +986,33 @@ namespace osu.Game.Screens.Select
                     carousel?.SelectNextRandom();
                 else
                     base.PerformSelection();
+            }
+
+            public override void AddChild(CarouselItem i)
+            {
+                if (!IsGrouping || !(i is CarouselBeatmapSet set))
+                    base.AddChild(i);
+                else
+                {
+                    foreach (var beatmap in set.Beatmaps)
+                    {
+                        BeatmapSetInfo falseInfo = carousel.CreateSingleInfoForBeatmap(set.BeatmapSet, beatmap.Beatmap);
+                        base.AddChild(new CarouselBeatmapSet(falseInfo));
+                    }
+                }
+            }
+
+            public override void RemoveChild(CarouselItem i)
+            {
+                if (!IsGrouping || !(i is CarouselBeatmapSet set))
+                    base.RemoveChild(i);
+                else
+                {
+                    foreach (var child in Children.OfType<CarouselBeatmapSet>().Where(s => s.BeatmapSet.Equals(set.BeatmapSet)).ToList())
+                    {
+                        base.RemoveChild(child);
+                    }
+                }
             }
         }
 

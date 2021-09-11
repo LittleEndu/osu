@@ -296,6 +296,27 @@ namespace osu.Game.Tests.Visual.SongSelect
             waitForSelection(3, 2);
         }
 
+        [Test]
+        public void TestGrouping()
+        {
+            loadBeatmaps();
+            AddStep("group by title", () => carousel.Filter(new FilterCriteria
+            {
+                Group = GroupMode.Title
+            }, false));
+            checkVisibleItemCount(false, set_count * 3);
+            AddStep("Add new set", () => carousel.UpdateBeatmapSet(createTestBeatmapSet(set_count + 1)));
+            checkVisibleItemCount(false, (set_count + 1) * 3);
+            AddStep("ungroup", () => carousel.Filter(new FilterCriteria(), false));
+            checkVisibleItemCount(false, set_count + 1);
+            AddStep("group by title", () => carousel.Filter(new FilterCriteria
+            {
+                Group = GroupMode.Title
+            }, false));
+            AddStep("Remove set", () => carousel.RemoveBeatmapSet(createTestBeatmapSet(set_count + 1)));
+            checkVisibleItemCount(false, set_count * 3);
+        }
+
         /// <summary>
         /// Test random non-repeating algorithm
         /// </summary>
