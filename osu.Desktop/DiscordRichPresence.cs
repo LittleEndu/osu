@@ -28,6 +28,9 @@ namespace osu.Desktop
         [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; }
 
+        [Resolved]
+        private IAPIProvider apiProvider { get; set; }
+
         private IBindable<APIUser> user;
 
         private readonly IBindable<UserStatus> status = new Bindable<UserStatus>();
@@ -41,7 +44,7 @@ namespace osu.Desktop
         };
 
         [BackgroundDependencyLoader]
-        private void load(IAPIProvider provider, OsuConfigManager config)
+        private void load(OsuConfigManager config)
         {
             client = new DiscordRpcClient(client_id)
             {
@@ -57,7 +60,7 @@ namespace osu.Desktop
 
             config.BindWith(OsuSetting.DiscordRichPresence, privacyMode);
 
-            (user = provider.LocalUser.GetBoundCopy()).BindValueChanged(u =>
+            (user = apiProvider.LocalUser.GetBoundCopy()).BindValueChanged(u =>
             {
                 status.UnbindBindings();
                 status.BindTo(u.NewValue.Status);
@@ -104,9 +107,21 @@ namespace osu.Desktop
 
             // update user information
             if (privacyMode.Value == DiscordRichPresenceMode.Limited)
+            {
                 presence.Assets.LargeImageText = string.Empty;
+            }
             else
-                presence.Assets.LargeImageText = $"{user.Value.Username}" + (user.Value.Statistics?.GlobalRank > 0 ? $" (rank #{user.Value.Statistics.GlobalRank:N0})" : string.Empty);
+            {
+                string largeText = $"{user.Value.Username}";
+
+                if (apiProvider.RulesetsStatistics.Value != null)
+                {
+                    apiProvider.RulesetsStatistics.Value.TryGetValue(ruleset.Value.ShortName, out UserStatistics statistics);
+                    largeText += (statistics?.GlobalRank > 0 ? $" (rank #{statistics.GlobalRank:N0})" : string.Empty);
+                }
+
+                presence.Assets.LargeImageText = largeText;
+            }
 
             // update ruleset
             presence.Assets.SmallImageKey = ruleset.Value.IsLegacyRuleset() ? $"mode_{ruleset.Value.OnlineID}" : "mode_custom";
