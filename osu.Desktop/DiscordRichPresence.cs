@@ -104,9 +104,21 @@ namespace osu.Desktop
 
             // update user information
             if (privacyMode.Value == DiscordRichPresenceMode.Limited)
+            {
                 presence.Assets.LargeImageText = string.Empty;
+            }
             else
-                presence.Assets.LargeImageText = $"{user.Value.Username}" + (user.Value.Statistics?.GlobalRank > 0 ? $" (rank #{user.Value.Statistics.GlobalRank:N0})" : string.Empty);
+            {
+                string largeText = $"{user.Value.Username}";
+
+                if (user.Value.RulesetsStatistics != null)
+                {
+                    user.Value.RulesetsStatistics.TryGetValue(ruleset.Value.ShortName, out UserStatistics statistics);
+                    largeText += (statistics?.GlobalRank > 0 ? $" (rank #{statistics.GlobalRank:N0})" : string.Empty);
+                }
+
+                presence.Assets.LargeImageText = largeText;
+            }
 
             // update ruleset
             presence.Assets.SmallImageKey = ruleset.Value.IsLegacyRuleset() ? $"mode_{ruleset.Value.OnlineID}" : "mode_custom";
